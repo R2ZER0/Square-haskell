@@ -6,13 +6,16 @@ type Aliases = Map String Value
 type Scope = [Aliases]
 data VM = VM { scope :: Scope }
 
-data Value = Null | Literal String | Procedure Statement
-data Statement = Block [Statement] | Statement String [Value]
+data Value = Null | Literal String | Procedure Statement deriving (Eq)
+data Statement = Block [Statement] | Statement String [Value] deriving (Eq)
 
 instance Show Value where
     show Null = "<Null>"
-    show (Literal string) = string
+    show (Literal string) = show string
     show (Procedure statement) = "<Procedure>"
+    
+instance Show VM where
+    show vm = show (scope vm)
 
 -- Get/set aliases, based on the provided scope
 get :: Scope -> String -> Value
@@ -29,12 +32,12 @@ setl [] what value = [M.insert what value M.empty]
 
 -- Set an existing variable (in any scope, this or upwards)
 set :: Scope -> String -> Value -> Scope
+set [] what value = setl [] what value
 set scope what value = setr scope
     where
         setr (aliases:next)
             | M.member what aliases = (M.insert what value aliases) : next
             | otherwise = aliases : (setr next)
-set [] what value = setl [] what value
 
 -- Shortcut functions to get/set aliases
 vmget :: VM -> String -> Value
@@ -55,26 +58,39 @@ vmleave vm = VM { scope = tail (scope vm) }
 
 exec :: VM -> Value -> (VM, Value)
 -- Execute a block (list of statements)
-exec vm (Procedure (Block statements)) = execr statements (vmenter vm, Null)
+exec vm (Procedure (Block statements)) = trace "BLOCK" $ execr statements (vmenter vm, Null)
     where
         execr :: [Statement] -> (VM, Value) -> (VM, Value)
         execr (statement:more) (vm, value) = execr more (exec vm (Procedure statement))
         execr [] (vm, value) = (vm, value)
         
 -- Execute a single statement
-exec vm (Procedure (Statement fun args)) = dofun fun
+exec vm (Procedure (Statement fun args)) = trace "STATEMENT" $ dofun fun args
     where
         dofun :: String -> [Value] -> (VM, Value)
+        -- Built-in functions
         dofun "trace" args = trace (show $ head args) $ (vm, Null)
+        dofun "show" args = trace (show $ head args) $ (vm, Null)
         dofun "var" ((Literal name):value:_) = (vmsetl vm name value, Null)
         dofun "set" ((Literal name):value:_) = (vmset vm name value, Null)
         dofun "get" ((Literal name):_) = (vm, vmget vm name)
-        dofun fun args = exec funvm (get funvm fun)
+        -- User-defined functions
+        dofun fun args
+            | userfun /= Null = exec funvm userfun
+            | otherwise = trace ("Error: function " ++ fun ++ " does not exist!") $ (vm, Null)
         
-        funvm = funvmr args 1
+        userfun = (vmget funvm fun)
+        funvm = funvmr vm args 1
         funvmr :: VM -> [Value] -> Integer -> VM
         funvmr vm (arg:args) num = funvmr (vmsetl vm ("arg" ++ (show num)) arg) args (num + 1)
         funvmr vm _ num = vmsetl vm "numargs" $ Literal (show num)
 
--- Attempting to execute something that you shouldn't!
-exec vm _ = trace "ERROR: NOT EXECUTABLE" $ (vm, Null)
+-- Nulls and Literals just evaluate to themselves
+exec vm Null = trace "ERROR: NULL NOT EXECUTABLE" $ (vm, Null)
+exec vm (Literal value) = trace "LITERAL" $ (vm, Literal value)
+
+testVM = VM { scope = [] }
+testCode = Procedure (Statement "t" [Literal "hello!"])
+
+
+
