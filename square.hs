@@ -12,7 +12,9 @@ data Statement = Block [Statement] | Statement String [Value] deriving (Eq)
 instance Show Value where
     show Null = "Null"
     show (Literal string) = "Literal " ++ (show string)
-    show (Procedure statement) = "Procedure<>"
+    show (Procedure statement) = "Procedure"
+    show (IProcedure statement) = "IProcedure"
+    show (Lookup name) = "Lookup " ++ name
     
 instance Show VM where
     show vm = show (scope vm)
