@@ -1,0 +1,5 @@
+print hello there
+var abc asdf
+print $abc
+set abc def
+print $abc
