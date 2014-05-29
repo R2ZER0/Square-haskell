@@ -10,3 +10,9 @@ instance Show VM where
     show vm = show (scope vm)
 
 data Value = Value String | Expression [Value] | Procedure [Value] | ValueList [Value]
+
+
+-- set something [
+--     print hello there
+--     fire (curweapon)
+-- ]
