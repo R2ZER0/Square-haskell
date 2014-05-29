@@ -3,3 +3,9 @@ var abc asdf
 print $abc
 set abc def
 print $abc
+
+func thing [
+    print a function call
+]
+
+thing what;

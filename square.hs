@@ -6,8 +6,8 @@ type Aliases = M.Map String Value
 type Scope = [Aliases]
 data VM = VM { scope :: Scope }
 
-data Value = Null | Literal String | Procedure Statement | IProcedure Statement | Lookup String deriving (Eq)
-data Statement = Block [Statement] | Statement String [Value] deriving (Eq)
+data Value = Null | Literal String | Procedure Statement | IProcedure Statement | Lookup String | NProcedure (VM -> [Value] -> (VM, Value)) deriving (Eq)
+data Statement = Block [Statement] | Statement Value [Value] deriving (Eq)
 
 instance Show Value where
     show Null = "Null"
@@ -19,6 +19,7 @@ instance Show Value where
 instance Show VM where
     show vm = show (scope vm)
 
+
 -- Get the actual value of a statement
 valueof :: VM -> Value -> Value
 valueof _ Null = Null
@@ -27,13 +28,20 @@ valueof _ (Procedure statement) = (Procedure statement)
 valueof vm (IProcedure statement) = resvalue
     where (resvm, resvalue) = exec vm (IProcedure statement)
 valueof vm (Lookup name) = vmget vm name
+valueof vm (NProcedure f) = (NProcedure f)
 
 valuestr :: VM -> Value -> String
 valuestr _ Null = "Null"
 valuestr _ (Literal str) = str 
-valuestr _ (Procedure _) = "Procedure" -- TODO, maybe make it the actual Procedure?
+valuestr _ (Procedure _) = "Procedure" -- TODO, maybe make it a printout of the actual Procedure?
 valuestr vm (IProcedure statement) = valuestr vm $ valueof vm (IProcedure statement)
 valuestr vm (Lookup name) = valuestr vm $ valueof vm (Lookup name)
+valuestr _ (NProcedure _) = "NativeProcedure"
+    
+-- The (special-case) value of a function name
+funcvalue :: VM -> Value -> Value
+funcvalue vm (Literal what) = valueof (Lookup what)
+funcvalue vm value = valueof value
     
 -- Get/set aliases, based on the provided scope
 get :: Scope -> String -> Value
@@ -85,10 +93,10 @@ exec vm (Procedure (Block statements)) = trace "BLOCK" $ execr statements (vment
 -- Execute a single statement
 exec vm (Procedure (Statement fun args)) = trace "STATEMENT" $ dofun fun literalargs
     where
-        dofun :: String -> [Value] -> (VM, Value)
+        dofun :: Value -> [Value] -> (VM, Value)
         -- Built-in functions
         dofun "trace" args = trace (valuestr vm $ head args) $ (vm, Null)
-        dofun "concat" args = (Literal (unwords $ map (valuestr vm) args), vm)
+        dofun "concat" args = (vm, Literal (unwords $ map (valuestr vm) args))
         dofun "show" args = trace (show $ head args) $ (vm, Null)
         dofun "var" ((Literal name):value:_) = (vmsetl vm name value, Null)
         dofun "set" ((Literal name):value:_) = (vmset vm name value, Null)
@@ -104,7 +112,10 @@ exec vm (Procedure (Statement fun args)) = trace "STATEMENT" $ dofun fun literal
         funvmr vm (arg:args) num = funvmr (vmsetl vm ("arg" ++ (show num)) arg) args (num + 1)
         funvmr vm _ num = vmsetl vm "numargs" $ Literal (show (num-1))
         
-        literalargs = foldl valueof vm args
+        literalfunc = funcvalue
+        literalargs = map (valueof vm) args
+
+exec vm (NProcedure f) = trace "NPROCEDURE" $ f vm -- Nice 'n' simple
 
 -- I can't think of a situation where these things would actually be executed, but meh...
 -- Immidiate Procedure & variable lookup
@@ -115,10 +126,13 @@ exec vm (Lookup name) = (vm, vmget vm name)
 exec vm Null = trace "ERROR: NULL NOT EXECUTABLE" $ (vm, Null)
 exec vm (Literal value) = trace "LITERAL" $ (vm, Literal value)
 
-testVM = VM { scope = [] }
+testVM = VM { scope = [M.fromList [
+        ("trace", \vm args -> trace (unwords args) (vm, Null))
+    ]] }
 testCode = Procedure (Block [
-            Statement "trace" [Literal "hello!"]
-            ])
+        Statement "var" [Literal "abc", Literal "def"],
+        Statement "trace" [Lookup "abc"]
+    ])
 
 
 
